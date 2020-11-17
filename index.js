@@ -23,32 +23,35 @@ class ServerlessTunnel {
 
     // Run tunnels after serverless-offline
     this.hooks = {
-      "tunnel:init": this.runServer.bind(this, true),
-      "before:offline:start:init": this.runServer.bind(this),
+      "tunnel:init": async () => {
+        this.runServer(true);
+      },
+      "before:offline:start:init": async () => {
+        this.runServer();
+      },
+      "before:offline:start:end": async () => {
+        this.closeServer();
+      },
     };
   }
 
-  runTunnel({ port, envProp, ws, path, ngrokOptions }) {
+  async runTunnel({ port, envProp, ws, path, ngrokOptions }) {
     try {
-      ngrok.connect(
-        {
-          addr: port,
-          proto: "http",
-          region: "eu",
-          ...(ngrokOptions || {}),
-        },
-        (err, url) => {
-          if (err) {
-            this.log(`Unable to create tunnel: ${err.message}`);
-          } else {
-            this.onConnect(url, envProp, ws, path);
+      const url = await ngrok.connect({
+        addr: port,
+        proto: "http",
+        region: "eu",
+        ...(ngrokOptions || {}),
+        onStatusChange: (status) => {
+          if (status === "closed") {
+            this.onTunnelClose();
           }
-        }
-      );
+        },
+      });
 
-      ngrok.on("disconnect", () => this.onTunnelClose());
-      ngrok.on("error", (e) => this.errorHandler(e));
+      this.onConnect(url, envProp, ws, path);
     } catch (e) {
+      this.log(`Unable to create tunnel: ${err.message}`);
       this.errorHandler(e);
     }
   }
@@ -72,7 +75,7 @@ class ServerlessTunnel {
   }
 
   onTunnelClose() {
-    this.log("Closing tunnels...");
+    this.log("Tunnel disconnected.");
   }
 
   runServer(selfInit) {
@@ -93,11 +96,15 @@ class ServerlessTunnel {
       if (this.options.tunnels && this.options.tunnels.length) {
         this.log("Starting tunnels...");
         this.options.tunnels.forEach((opt) => this.runTunnel(opt));
-        process.on("SIGINT", () => this.stopTunnel());
       } else {
         this.log("Tunnels are not configured. Skipping...");
       }
     }
+  }
+
+  closeServer() {
+    this.log("Stopping tunnels...");
+    this.stopTunnel();
   }
 
   stopTunnel() {
