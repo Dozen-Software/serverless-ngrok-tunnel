@@ -50,9 +50,9 @@ class ServerlessTunnel {
       });
 
       this.onConnect(url, envProp, ws, path);
-    } catch (e) {
+    } catch (err) {
       this.log(`Unable to create tunnel: ${err.message}`);
-      this.errorHandler(e);
+      this.errorHandler(err);
     }
   }
 
